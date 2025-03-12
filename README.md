@@ -11,8 +11,11 @@ Ahora el programa tiene un menú interactivo. Al ejecutar `OSINTchile.py`, verá
 Seleccione una opción:
 
 1.-Buscar por RUT
+
 2.-Buscar por Patente (WIP)
+
 3.-Buscar por Teléfono (WIP)
+
 4.-Salir
 
 No es necesario usar parámetros al ejecutar el script. Solo debes elegir la opción que desees.
