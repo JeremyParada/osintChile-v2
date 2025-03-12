@@ -1,72 +1,126 @@
 import argparse
 import re
 import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 import urllib.parse
 from urllib3.exceptions import InsecureRequestWarning 
 import json
 import base64
 from bs4 import BeautifulSoup
 import codecs
+import ssl
+from lxml import html
+from rut_chile import rut_chile
+
+class Consulta:
+    XPATH_RAZON_SOCIAL = '/html/body/div/div[4]'
+    XPATH_INICIO_ACTIVIDADES = '/html/body/div/div[7]'
+    XPATH_ACTIVIDADES = '/html/body/div/table[1]/tr'
+
+    def __init__(self, rut):
+        self.rut = rut
+
+    def validate(self):
+        return rut_chile.is_valid_rut(self.rut)
+
+    def resultado(self):
+        print('--==<Datos desde SII>==--')
+        captcha = self.fetch_captcha()
+        rut_formatted = rut_chile.format_capitalized_rut_without_dots(self.rut)
+        rut = rut_formatted.split('-')[0]
+        dv  = rut_formatted.split('-')[1]
+
+        data = {
+            'RUT': rut,
+            'DV':  dv,
+            'PRG': 'STC',
+            'OPC': 'NOR',
+            'txt_code': captcha['code'],
+            'txt_captcha': captcha['captcha']
+        }
+        response = requests.post('https://zeus.sii.cl/cvc_cgi/stc/getstc', data=data, verify=False)
+        data = html.fromstring(response.text)
+
+        actividades = [
+            {
+                'giro': node.xpath('./td[1]/font')[0].text.strip(),
+                'codigo': int(node.xpath('./td[2]/font')[0].text.strip()),
+                'categoria': node.xpath('./td[3]/font')[0].text.strip(),
+                'afecta': node.xpath('./td[4]/font')[0].text.strip() == 'Si'
+            }
+            for node in data.xpath(self.XPATH_ACTIVIDADES)[1:]
+        ]
+        # Initialize a list to store the extracted data
+        documentos_timbrados = []
+
+        # Extract the table rows
+        table_rows = data.xpath("//table[@class='tabla']/tr")
+
+        # Skip the header row (first row)
+        for row in table_rows[1:]:
+            # Extract data from the row
+            cells = row.xpath("td/font/text()")
+            if len(cells) == 2:
+                documento = cells[0].strip()
+                ultimo_timbraje = cells[1].strip()
+                
+                # Create a dictionary for each row and append it to the list
+                documento_info = {
+                    'Documento': documento,
+                    'Año último timbraje': ultimo_timbraje
+                }
+                documentos_timbrados.append(documento_info)
+
+        xpath_inicio_actividades = data.xpath("//span[contains(text(),'Contribuyente presenta Inicio de Actividades:')]/text()")
+        xpath_fecha_inicio_actividades = data.xpath("//span[contains(text(),'Fecha de Inicio de Actividades:')]/text()")
+        xpath_empresa_menor_tamano = data.xpath("//span[contains(text(),'Contribuyente es Empresa de Menor Tama')]/text()[last()]")
+        xpath_aut_moneda_extranjera =  data.xpath("//span[contains(text(),'Contribuyente autorizado para declarar y pagar sus impuestos en moneda extranjera:')]/text()")
+
+        inicio_actividades = ""
+        fecha_inicio_actividades = ""
+        empresa_menor_tamano = ""
+        aut_moneda_extranjera = ""
+
+        if len(xpath_inicio_actividades) != 0:
+            inicio_actividades = xpath_inicio_actividades[0].split(":", 1)[-1].strip()
+        if len(xpath_fecha_inicio_actividades) != 0:
+            fecha_inicio_actividades = xpath_fecha_inicio_actividades[0].split(":", 1)[-1].strip()
+        if len(xpath_empresa_menor_tamano) != 0:
+            empresa_menor_tamano = xpath_empresa_menor_tamano[0].split(":", 1)[-1].strip()
+        if len(xpath_aut_moneda_extranjera) != 0:
+            aut_moneda_extranjera    = xpath_aut_moneda_extranjera[0].split(":", 1)[-1].strip()
+
+        data_dict = {
+            'rut': self.rut,
+            'razon_social': data.xpath(self.XPATH_RAZON_SOCIAL)[0].text.strip(),
+            'empresa_menor_tamano': empresa_menor_tamano,
+            'aut_moneda_extranjera': aut_moneda_extranjera,
+            'inicio_actividades': inicio_actividades,
+            'fecha_inicio_actividades': fecha_inicio_actividades,
+            'actividades': actividades,
+            'documentos_timbrados': documentos_timbrados
+            }
+        # Serialize the dictionary as JSON
+        json_data = json.dumps(data_dict, ensure_ascii=False, indent=4)
+
+        return json_data
+
+    def fetch_captcha(self):
+        response = requests.post('https://zeus.sii.cl/cvc_cgi/stc/CViewCaptcha.cgi', data={'oper': 0}, verify=False)
+        data = response.json()
+
+        return {
+            'code': base64.b64decode(data['txtCaptcha'])[36:40].decode(),
+            'captcha': data['txtCaptcha']
+        }
 
 def busqueda(rut):
-    busquedaRutSii(rut)
-
-def busquedaRutSii(rut):
-
-    
-    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-    print('  --==<Datos desde Sii>==--')
-    print('  Si tiene inicio de actividades deberia estar acá')
-    #vamos por el captcha
-    urlSiiGetCaptcha = 'uggcf://mrhf.fvv.py/pip_ptv/fgp/PIvrjPncgpun.ptv'
-    paramCaptcha = urllib.parse.urlencode({'oper':0})
-    paramCaptcha = paramCaptcha.encode('ascii')
-
-    htmlGetCaptcha = requests.post(url=codecs.decode(urlSiiGetCaptcha, 'rot_13'),data=paramCaptcha, verify=False).text
-    captchaJson = json.loads(htmlGetCaptcha)
-    captchaB64 = captchaJson.get('txtCaptcha')
-    txtCaptchaDecoded = base64.b64decode(captchaB64.encode('ascii')).decode('ascii')
-
-    paramDatos = urllib.parse.urlencode({
-          'RUT' : rut.split('-')[0],
-          'DV' : str(rut.split('-')[1]) if rut.split('-')[1].isnumeric() else str(rut.split('-')[1]).upper(),
-          'PRG' : 'STC',
-          'OPC' : 'NOR',
-          'txt_code' : txtCaptchaDecoded[36:40] ,
-          'txt_captcha' : captchaB64 })
-
-    paramDatos = paramDatos.encode('ascii')
-    urlSiiDatos = 'uggcf://mrhf.fvv.py/pip_ptv/fgp/trgfgp'
-    
-    page = requests.post(url=codecs.decode(urlSiiDatos, 'rot_13'), data=paramDatos, verify=False)
-    
-    soup = BeautifulSoup(page.text, 'html.parser')
-    divs = soup.find_all('div')
- 
-    regexp = re.compile("Contribuyente presenta Inicio de Actividades: (.*?)<", re.MULTILINE)
-    match = regexp.search(page.text)
-    if match:
-        contribuyente = match.group(1)
+    consulta = Consulta(rut)
+    if consulta.validate():
+        print(consulta.resultado())
     else:
-        contribuyente = ""
-    
-    if(contribuyente=='SI'):
-        print('     Rut                      :', divs[7].get_text())
-        print('     Razon Social             :', divs[5].get_text())
-
-        trList = soup.find('table').find_all('tr')
-        for actividad in trList[1:]:
-            tdList = actividad.find_all('td')
-
-            print('        Giro                     :', tdList[0].find('font').get_text())
-            print('        Codigo                   :', tdList[1].find('font').get_text())
-            print('        Categoria                :', tdList[2].get_text())
-            print('        Afecta                   :', tdList[3].get_text())
-            print('        Fecha                    :', tdList[4].get_text())
-            print(' ')
-    
-    else:
-            print('\n   --Contribuyente no presenta inicio de Actividades-- \n')
+        print("RUT inválido")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='OSINTchile', description='Busqueda automatica de fuentes abiertas de chile')
@@ -76,4 +130,4 @@ if __name__ == "__main__":
     if not (parametros.rut) :
         parser.print_help()
     else:
-        busquedaRutSii(parametros.rut)
+        busqueda(parametros.rut)

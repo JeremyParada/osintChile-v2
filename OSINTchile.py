@@ -8,29 +8,39 @@ import sources.numverify as numverify
 import sources.masterchileapkBday as mchaBday
 import sources.celuzador as celuzador
 
-parser = argparse.ArgumentParser(prog='OSINTchile', description='Busqueda automatica en fuentes abiertas (y no tan abiertas) de chile')
-parser.add_argument('-rut',  type=str, nargs='?', help='Rut de la persona a buscar, con formato: 11111111-1 ')
-parser.add_argument('-patente', type=str, nargs='?', help='Patente del vehiculo a buscar, con formato: aabb11')
-parser.add_argument('-telefono', type=str, nargs='?', help='telefono a buscar, con formato: 56999999999')
 
-parametros = parser.parse_args()
+def main():
+    while True:
+        print("Seleccione una opción:")
+        print("1. Buscar por RUT")
+        print("2. Buscar por Patente")
+        print("3. Buscar por Teléfono")
+        print("4. Salir")
+        
+        opcion = input("Ingrese el número de la opción deseada: ")
+        
+        if opcion == '1':
+            rut = input("Ingrese el RUT de la persona a buscar (formato: 11111111-1): ")
+            salud.busqueda(rut=rut)
+            nrf.busqueda(rut=rut)
+            sii.busqueda(rut=rut)
+            volanteomaleta.busqueda(rut=rut)
+            mchaBday.busqueda(rut=rut)
+        elif opcion == '2':
+            patente = input("Ingrese la patente del vehículo a buscar (formato: aabb11): ")
+            print('---En Construccion, se aceptan contribuciones---')
+            soap.busqueda(patente=patente)
+            volanteomaleta.busqueda(patente=patente)
+        elif opcion == '3':
+            telefono = input("Ingrese el teléfono a buscar (formato: 56999999999): ")
+            print('---En Construccion, se aceptan contribuciones---')
+            numverify.busqueda(telefono=telefono)
+            celuzador.busqueda(telefono=telefono)
+        elif opcion == '4':
+            print("Saliendo del programa...")
+            break
+        else:
+            print("Opción no válida, por favor intente nuevamente.")
 
-
-if not(parametros.rut) and  not(parametros.patente) and  not(parametros.telefono):
-    parser.print_help()
-
-if parametros.rut:
-    salud.busqueda(rut = parametros.rut)
-    nrf.busqueda(rut = parametros.rut )
-    sii.busqueda(rut = parametros.rut)
-    volanteomaleta.busqueda(rut = parametros.rut)
-    mchaBday.busqueda(rut = parametros.rut)
-if parametros.patente:
-    print('---En Construccion, se aceptan contribuciones---')
-    soap.busqueda(patente = parametros.patente)
-    volanteomaleta.busqueda(patente= parametros.patente)
-if parametros.telefono:
-    print('---En Construccion, se aceptan contribuciones---')
-    numverify.busqueda(telefono = parametros.telefono)
-    celuzador.busqueda(telefono=parametros.telefono)
-    
+if __name__ == "__main__":
+    main()
