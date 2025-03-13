@@ -4,3 +4,4 @@ Pillow
 climage
 rut_chile
 lxml
+jwt
